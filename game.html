@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="el" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Antiyoy Web Strategy Game</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { font-family: 'Inter', sans-serif; user-select: none; }
+        canvas { touch-action: none; }
+    </style>
+</head>
+<body class="h-full bg-slate-900 text-slate-100 flex flex-col overflow-hidden">
+
+    <header class="bg-slate-800 border-b border-slate-700 px-4 py-3 flex flex-wrap items-center justify-between shadow-md z-10">
+        <div class="flex items-center space-x-3">
+            <div class="bg-emerald-600 text-white font-black px-3 py-1.5 rounded-lg shadow uppercase tracking-wider text-sm sm:text-base">
+                Antiyoy Web
+            </div>
+            <div id="game-info" class="hidden sm:flex items-center space-x-4 text-sm font-medium text-slate-300">
+                <span id="info-turn" class="bg-slate-700 px-2.5 py-1 rounded-md">Γύρος: 1</span>
+                <span id="info-player" class="px-2.5 py-1 rounded-md border border-slate-600">Σειρά: Παίκτης 1</span>
+            </div>
+        </div>
+
+        <div class="flex items-center space-x-2 mt-2 sm:mt-0">
+            <button id="btn-menu" class="bg-slate-700 hover:bg-slate-600 text-slate-200 px-3 py-1.5 rounded-lg text-sm font-semibold transition shadow">
+                Μενού
+            </button>
+            <button id="btn-end-turn" class="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-1.5 rounded-lg text-sm font-bold shadow transition flex items-center space-x-1">
+                <span>Τέλος Γύρου</span>
+            </button>
+        </div>
+    </header>
+
+    <main class="flex-1 flex flex-col md:flex-row relative overflow-hidden">
+        <!-- Canvas Game Area -->
+        <div id="canvas-container" class="flex-1 relative bg-slate-950 flex items-center justify-center overflow-hidden">
+            <canvas id="game-canvas" class="cursor-grab active:cursor-grabbing"></canvas>
+            
+            <!-- Floating Mobile HUD / Stats -->
+            <div class="absolute top-4 left-4 bg-slate-900/80 backdrop-blur border border-slate-700/60 p-3 rounded-xl shadow-lg flex flex-col space-y-1.5 text-xs sm:text-sm">
+                <div class="flex justify-between space-x-4">
+                    <span class="text-slate-400">Χρυσός:</span>
+                    <span id="hud-gold" class="font-bold text-amber-400">10</span>
+                </div>
+                <div class="flex justify-between space-x-4">
+                    <span class="text-slate-400">Έσοδα:</span>
+                    <span id="hud-income" class="font-bold text-emerald-400">+5</span>
+                </div>
+                <div class="flex justify-between space-x-4">
+                    <span class="text-slate-400">Έξοδα:</span>
+                    <span id="hud-upkeep" class="font-bold text-rose-400">-2</span>
+                </div>
+            </div>
+
+            <!-- Floating Action Panel (Context Menu for Selected Tile) -->
+            <div id="action-panel" class="absolute bottom-4 left-1/2 transform -translate-x-1/2 bg-slate-900/90 backdrop-blur border border-slate-700 p-3 rounded-2xl shadow-2xl hidden flex-col sm:flex-row items-center space-y-2 sm:space-y-0 sm:space-x-3 z-20 max-w-full">
+                <div id="selected-tile-desc" class="text-xs font-semibold text-slate-300 px-2 text-center sm:text-left">
+                    Επιλογή τετραγώνου
+                </div>
+                <div id="action-buttons" class="flex flex-wrap justify-center gap-1.5">
+                    <!-- Dynamic buttons injected here -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Sidebar (Game Status & Controls) -->
+        <aside class="w-full md:w-80 bg-slate-900 border-t md:border-t-0 md:border-l border-slate-800 p-4 flex flex-col justify-between overflow-y-auto max-h-48 md:max-h-full">
+            <div class="space-y-4">
+                <h3 class="font-bold text-slate-200 border-b border-slate-800 pb-2 text-sm uppercase tracking-wider">Κατάσταση Παιχνιδιού</h3>
+                <div id="player-list" class="space-y-2 text-xs sm:text-sm">
+                    <!-- Populated dynamically -->
+                </div>
+                <div class="bg-slate-800/60 p-3 rounded-xl border border-slate-700/50 text-xs text-slate-300 space-y-1">
+                    <p class="font-semibold text-slate-200">Οδηγίες:</p>
+                    <p>• Κάνε κλικ σε δικό σου χωριό για κατασκευή μονάδων ή πύργων.</p>
+                    <p>• Κάνε κλικ σε μονάδα σου και μετά σε γειτονικό τετράγωνο για κίνηση ή επίθεση.</p>
+                    <p>• Κατάκτησε όλα τα εχθρικά χωριά για να κερδίσεις!</p>
+                </div>
+            </div>
+            <div class="mt-4 pt-3 border-t border-slate-800 text-center text-xs text-slate-500">
+                Antiyoy Web Edition • Firebase Multiplayer
+            </div>
+        </aside>
+    </main>
+
+    <!-- Modal Container -->
+    <div id="modal-backdrop" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div id="modal-box" class="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-md p-6 shadow-2xl flex flex-col space-y-5">
+            <div class="text-center space-y-1">
+                <h2 id="modal-title" class="text-xl font-black text-white">Καλωσήρθατε στο Antiyoy</h2>
+                <p id="modal-subtitle" class="text-xs text-slate-400">Επιλέξτε τρόπο παιχνιδιού</p>
+            </div>
+
+            <div id="modal-content" class="space-y-3">
+                <button id="btn-start-vs-ai" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 px-4 rounded-xl shadow transition text-sm">
+                    Singleplayer (vs AI)
+                </button>
+                <button id="btn-open-multi" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 px-4 rounded-xl shadow transition text-sm">
+                    Online Multiplayer
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Custom Toast / Message Box -->
+    <div id="custom-alert" class="fixed top-20 left-1/2 transform -translate-x-1/2 bg-slate-800 border border-slate-700 text-white px-4 py-3 rounded-xl shadow-2xl z-50 hidden text-sm font-medium transition-all">
+        <span id="alert-text">Μήνυμα</span>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, getDoc, setDoc, updateDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Environment variables
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'antiyoy-web-game';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
+
+        let db = null;
+        let auth = null;
+        let userId = null;
+
+        if (firebaseConfig) {
+            try {
+                const app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+            } catch(e) {
+                console.error("Firebase init error:", e);
+            }
+        }
+
+        // Game Configuration & State
+        const CONFIG = {
+            cols: 10,
+            rows: 10,
+            tileSize: 42,
+            colors: {
+                0: '#475569', // Neutral / Empty
+                1: '#ef4444', // Player 1 (Red)
+                2: '#3b82f6', // Player 2 (Blue)
+                3: '#10b981', // Player 3 (Green)
+                4: '#f59e0b'  // Player 4 (Yellow)
+            }
+        };
+
+        let gameState = {
+            turn: 1,
+            currentPlayer: 1,
+            players: {
+                1: { id: 1, name: 'Παίκτης 1', gold: 10, color: '#ef4444', isAI: false },
+                2: { id: 2, name: 'AI Bot', gold: 10, color: '#3b82f6', isAI: true }
+            },
+            tiles: [], // 2D array [r][c]
+            selectedTile: null,
+            selectedUnit: null,
+            gameMode: 'local', // 'local' or 'multi'
+            roomId: 'room1',
+            status: 'playing' // 'playing', 'ended'
+        };
+
+        // Canvas & Rendering Variables
+        const canvas = document.getElementById('game-canvas');
+        const ctx = canvas.getContext('2d');
+        let camera = { x: 0, y: 0, scale: 1 };
+        let isDragging = false;
+        let startDrag = { x: 0, y: 0 };
+
+        function showAlert(msg) {
+            const alertBox = document.getElementById('custom-alert');
+            const alertText = document.getElementById('alert-text');
+            alertText.textContent = msg;
+            alertBox.classList.remove('hidden');
+            setTimeout(() => {
+                alertBox.classList.add('hidden');
+            }, 3000);
+        }
+
+        function initMap() {
+            gameState.tiles = [];
+            for (let r = 0; r < CONFIG.rows; r++) {
+                let row = [];
+                for (let c = 0; c < CONFIG.cols; c++) {
+                    row.push({
+                        r, c,
+                        owner: 0, // 0 = unowned
+                        type: 'land', // 'land', 'water', 'tree', 'stone'
+                        building: null, // 'village', 'tower', 'farm'
+                        unit: null // { type: 'peasant'/'spearman'/'knight', level: 1, owner: 1 }
+                    });
+                }
+                gameState.tiles.push(row);
+            }
+
+            // Place initial villages and territories
+            // Player 1 (Top-Left)
+            gameState.tiles[1][1].owner = 1;
+            gameState.tiles[1][1].building = 'village';
+            gameState.tiles[1][1].unit = { type: 'peasant', level: 1, owner: 1 };
+
+            // Player 2 (Bottom-Right)
+            let brR = CONFIG.rows - 2;
+            let brC = CONFIG.cols - 2;
+            gameState.tiles[brR][brC].owner = 2;
+            gameState.tiles[brR][brC].building = 'village';
+            gameState.tiles[brR][brC].unit = { type: 'peasant', level: 1, owner: 2 };
+
+            // Add some trees & stones randomly
+            for (let i = 0; i < 8; i++) {
+                let tr = Math.floor(Math.random() * CONFIG.rows);
+                let tc = Math.floor(Math.random() * CONFIG.cols);
+                if (gameState.tiles[tr][tc].owner === 0 && !gameState.tiles[tr][tc].building) {
+                    gameState.tiles[tr][tc].type = Math.random() > 0.4 ? 'tree' : 'stone';
+                }
+            }
+        }
+
+        function resizeCanvas() {
+            const container = document.getElementById('canvas-container');
+            canvas.width = container.clientWidth;
+            canvas.height = container.clientHeight;
+            drawGame();
+        }
+
+        function drawGame() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.save();
+            ctx.translate(canvas.width / 2 + camera.x, canvas.height / 2 + camera.y);
+            ctx.scale(camera.scale, camera.scale);
+
+            const mapWidth = CONFIG.cols * CONFIG.tileSize;
+            const mapHeight = CONFIG.rows * CONFIG.tileSize;
+            ctx.translate(-mapWidth / 2, -mapHeight / 2);
+
+            // Draw Tiles
+            for (let r = 0; r < CONFIG.rows; r++) {
+                for (let c = 0; c < CONFIG.cols; c++) {
+                    const tile = gameState.tiles[r][c];
+                    const x = c * CONFIG.tileSize;
+                    const y = r * CONFIG.tileSize;
+
+                    // Tile Background Color
+                    let fillColor = '#334155'; // default land
+                    if (tile.type === 'water') fillColor = '#0284c7';
+                    else if (tile.type === 'tree') fillColor = '#166534';
+                    else if (tile.type === 'stone') fillColor = '#64748b';
+
+                    if (tile.owner > 0) {
+                        fillColor = CONFIG.colors[tile.owner] || '#475569';
+                    }
+
+                    // Highlight selected tile
+                    const isSelected = gameState.selectedTile && gameState.selectedTile.r === r && gameState.selectedTile.c === c;
+
+                    ctx.fillStyle = fillColor;
+                    ctx.strokeStyle = isSelected ? '#ffffff' : '#1e293b';
+                    ctx.lineWidth = isSelected ? 3 : 1;
+
+                    ctx.beginPath();
+                    ctx.roundRect(x + 2, y + 2, CONFIG.tileSize - 4, CONFIG.tileSize - 4, 8);
+                    ctx.fill();
+                    ctx.stroke();
+
+                    // Draw Buildings
+                    if (tile.building === 'village') {
+                        ctx.fillStyle = '#ffffff';
+                        ctx.beginPath();
+                        ctx.arc(x + CONFIG.tileSize/2, y + CONFIG.tileSize/2, 10, 0, Math.PI * 2);
+                        ctx.fill();
+                        ctx.strokeStyle = '#0f172a';
+                        ctx.lineWidth = 2;
+                        ctx.stroke();
+                    } else if (tile.building === 'tower') {
+                        ctx.fillStyle = '#cbd5e1';
+                        ctx.fillRect(x + 12, y + 12, CONFIG.tileSize - 24, CONFIG.tileSize - 24);
+                    }
+
+                    // Draw Units
+                    if (tile.unit) {
+                        ctx.fillStyle = '#0f172a';
+                        ctx.beginPath();
+                        ctx.arc(x + CONFIG.tileSize/2, y + CONFIG.tileSize/2, 12, 0, Math.PI * 2);
+                        ctx.fill();
+
+                        ctx.fillStyle = CONFIG.colors[tile.unit.owner] || '#ffffff';
+                        ctx.beginPath();
+                        ctx.arc(x + CONFIG.tileSize/2, y + CONFIG.tileSize/2, 9, 0, Math.PI * 2);
+                        ctx.fill();
+
+                        ctx.fillStyle = '#ffffff';
+                        ctx.font = 'bold 10px sans-serif';
+                        ctx.textAlign = 'center';
+                        ctx.textBaseline = 'middle';
+                        ctx.fillText(tile.unit.level, x + CONFIG.tileSize/2, y + CONFIG.tileSize/2);
+                    }
+                }
+            }
+
+            ctx.restore();
+        }
+
+        let touchStartPos = { x: 0, y: 0 };
+        canvas.addEventListener('pointerdown', (e) => {
+            isDragging = true;
+            startDrag = { x: e.clientX, y: e.clientY };
+            touchStartPos = { x: e.clientX, y: e.clientY };
+        });
+
+        canvas.addEventListener('pointermove', (e) => {
+            if (!isDragging) return;
+            const dx = e.clientX - startDrag.x;
+            const dy = e.clientY - startDrag.y;
+            camera.x += dx;
+            camera.y += dy;
+            startDrag = { x: e.clientX, y: e.clientY };
+            drawGame();
+        });
+
+        canvas.addEventListener('pointerup', (e) => {
+            isDragging = false;
+            const dist = Math.hypot(e.clientX - touchStartPos.x, e.clientY - touchStartPos.y);
+            if (dist < 5) {
+                // Click action
+                handleCanvasClick(e);
+            }
+        });
+
+        function handleCanvasClick(e) {
+            const rect = canvas.getBoundingClientRect();
+            const clickX = e.clientX - rect.left;
+            const clickY = e.clientY - rect.top;
+
+            const mapWidth = CONFIG.cols * CONFIG.tileSize;
+            const mapHeight = CONFIG.rows * CONFIG.tileSize;
+
+            const worldX = clickX - (canvas.width / 2 + camera.x) + mapWidth / 2;
+            const worldY = clickY - (canvas.height / 2 + camera.y) + mapHeight / 2;
+
+            const c = Math.floor(worldX / CONFIG.tileSize);
+            const r = Math.floor(worldY / CONFIG.tileSize);
+
+            if (r >= 0 && r < CONFIG.rows && c >= 0 && c < CONFIG.cols) {
+                selectTile(r, c);
+            }
+        }
+
+        function selectTile(r, c) {
+            const tile = gameState.tiles[r][c];
+            gameState.selectedTile = tile;
+            drawGame();
+            updateActionPanel();
+        }
+
+        function updateActionPanel() {
+            const panel = document.getElementById('action-panel');
+            const desc = document.getElementById('selected-tile-desc');
+            const btns = document.getElementById('action-buttons');
+            btns.innerHTML = '';
+
+            if (!gameState.selectedTile) {
+                panel.classList.add('hidden');
+                return;
+            }
+
+            panel.classList.remove('hidden');
+            const tile = gameState.selectedTile;
+            desc.textContent = `Θέση: (${tile.r}, ${tile.c}) | Ιδιοκτήτης: ${tile.owner || 'Κανένας'}`;
+
+            const curPlayer = gameState.currentPlayer;
+
+            // If player owns tile and has a village
+            if (tile.owner === curPlayer && tile.building === 'village' && !tile.unit) {
+                addActionButton(btns, 'Αγρότης (10g)', () => buyUnit(tile, 'peasant', 10));
+                addActionButton(btns, 'Πύργος (15g)', () => buildBuilding(tile, 'tower', 15));
+            }
+
+            // If player owns unit
+            if (tile.unit && tile.unit.owner === curPlayer) {
+                desc.textContent += ` | Μονάδα: Επ. ${tile.unit.level}`;
+                addActionButton(btns, 'Μετακίνηση', () => activateUnitMove(tile));
+            }
+        }
+
+        function addActionButton(container, text, callback) {
+            const btn = document.createElement('button');
+            btn.className = 'bg-slate-700 hover:bg-slate-600 text-white text-xs font-bold px-3 py-1.5 rounded-lg shadow transition';
+            btn.textContent = text;
+            btn.onclick = callback;
+            container.appendChild(btn);
+        }
+
+        function buyUnit(tile, type, cost) {
+            const player = gameState.players[gameState.currentPlayer];
+            if (player.gold < cost) {
+                showAlert('Δεν έχετε αρκετό χρυσό!');
+                return;
+            }
+            player.gold -= cost;
+            tile.unit = { type, level: 1, owner: gameState.currentPlayer };
+            updateHUD();
+            updateActionPanel();
+            drawGame();
+        }
+
+        function buildBuilding(tile, type, cost) {
+            const player = gameState.players[gameState.currentPlayer];
+            if (player.gold < cost) {
+                showAlert('Δεν έχετε αρκετό χρυσό!');
+                return;
+            }
+            player.gold -= cost;
+            tile.building = type;
+            updateHUD();
+            updateActionPanel();
+            drawGame();
+        }
+
+        let movingUnitSource = null;
+        function activateUnitMove(tile) {
+            movingUnitSource = tile;
+            showAlert('Κάντε κλικ σε διπλανό τετράγωνο για μετακίνηση/επίθεση');
+            // Next click handler will handle move if tile is adjacent
+        }
+
+        function updateHUD() {
+            const player = gameState.players[gameState.currentPlayer];
+            document.getElementById('hud-gold').textContent = player.gold;
+            document.getElementById('info-turn').textContent = `Γύρος: ${gameState.turn}`;
+            document.getElementById('info-player').textContent = `Σειρά: ${player.name}`;
+            document.getElementById('info-player').style.borderColor = player.color;
+
+            // Update Player List
+            const pList = document.getElementById('player-list');
+            pList.innerHTML = '';
+            Object.values(gameState.players).forEach(p => {
+                pList.innerHTML += `
+                    <div class="flex justify-between items-center p-2 rounded-lg bg-slate-800/80 border border-slate-700/50">
+                        <span class="font-semibold" style="color: ${p.color}">${p.name}</span>
+                        <span class="text-amber-400 font-bold">${p.gold} χρυσός</span>
+                    </div>
+                `;
+            });
+        }
+
+        function runAITurn() {
+            showAlert('Σειρά του AI Bot...');
+            setTimeout(() => {
+                const aiPlayer = gameState.players[2];
+                aiPlayer.gold += 6; // Income
+
+                // Simple AI logic: find villages, buy units, move towards enemy
+                for (let r = 0; r < CONFIG.rows; r++) {
+                    for (let c = 0; c < CONFIG.cols; c++) {
+                        let tile = gameState.tiles[r][c];
+                        if (tile.owner === 2 && tile.building === 'village' && !tile.unit && aiPlayer.gold >= 10) {
+                            tile.unit = { type: 'peasant', level: 1, owner: 2 };
+                            aiPlayer.gold -= 10;
+                        }
+                    }
+                }
+
+                endTurn();
+            }, 1000);
+        }
+
+        function endTurn() {
+            if (gameState.currentPlayer === 1) {
+                gameState.currentPlayer = 2;
+                updateHUD();
+                if (gameState.players[2].isAI) {
+                    runAITurn();
+                }
+            } else {
+                gameState.currentPlayer = 1;
+                gameState.turn++;
+                // Add income for Player 1
+                gameState.players[1].gold += 5;
+                updateHUD();
+            }
+            drawGame();
+        }
+
+        document.getElementById('btn-end-turn').onclick = () => {
+            if (gameState.currentPlayer === 2 && gameState.players[2].isAI) return;
+            endTurn();
+        };
+
+        document.getElementById('btn-menu').onclick = () => {
+            document.getElementById('modal-backdrop').classList.remove('hidden');
+        };
+
+        document.getElementById('btn-start-vs-ai').onclick = () => {
+            document.getElementById('modal-backdrop').classList.add('hidden');
+            gameState.gameMode = 'local';
+            gameState.players = {
+                1: { id: 1, name: 'Παίκτης 1', gold: 15, color: '#ef4444', isAI: false },
+                2: { id: 2, name: 'AI Bot', gold: 15, color: '#3b82f6', isAI: true }
+            };
+            initMap();
+            resizeCanvas();
+            updateHUD();
+        };
+
+        document.getElementById('btn-open-multi').onclick = async () => {
+            if (!db) {
+                showAlert('Το Firebase δεν είναι διαθέσιμο σε αυτό το περιβάλλον.');
+                return;
+            }
+            document.getElementById('modal-title').textContent = 'Online Multiplayer';
+            document.getElementById('modal-subtitle').textContent = 'Σύνδεση σε δωμάτιο...';
+            document.getElementById('modal-content').innerHTML = `
+                <div class="space-y-3">
+                    <input id="room-input" type="text" value="room1" placeholder="Κωδικός Δωματίου" class="w-full bg-slate-800 border border-slate-700 px-4 py-2.5 rounded-xl text-white font-medium focus:outline-none focus:border-indigo-500">
+                    <button id="btn-join-room" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 px-4 rounded-xl shadow transition text-sm">Σύνδεση Δωματίου</button>
+                </div>
+            `;
+
+            document.getElementById('btn-join-room').onclick = async () => {
+                const roomCode = document.getElementById('room-input').value.trim();
+                if (!roomCode) return;
+                gameState.roomId = roomCode;
+                gameState.gameMode = 'multi';
+
+                try {
+                    if (auth.currentUser) {
+                        userId = auth.currentUser.uid;
+                    } else if (typeof __initial_auth_token !== 'undefined') {
+                        await signInWithCustomToken(auth, __initial_auth_token);
+                        userId = auth.currentUser.uid;
+                    } else {
+                        const cred = await signInAnonymously(auth);
+                        userId = cred.user.uid;
+                    }
+
+                    document.getElementById('modal-backdrop').classList.add('hidden');
+                    initMultiplayer();
+                } catch(e) {
+                    console.error("Auth error:", e);
+                    showAlert('Σφάλμα αυθεντικοποίησης multiplayer.');
+                }
+            };
+        };
+
+        function initMultiplayer() {
+            const roomRef = doc(db, 'artifacts', appId, 'public', 'data', `rooms_${gameState.roomId}`);
+            
+            // Listen for room updates
+            onSnapshot(roomRef, (docSnap) => {
+                if (docSnap.exists()) {
+                    const data = docSnap.data();
+                    gameState.tiles = JSON.parse(data.tiles);
+                    gameState.turn = data.turn;
+                    gameState.currentPlayer = data.currentPlayer;
+                    gameState.players = data.players;
+                    updateHUD();
+                    drawGame();
+                } else {
+                    // Create initial room state
+                    initMap();
+                    gameState.players[2].isAI = false;
+                    gameState.players[2].name = 'Παίκτης 2';
+                    setDoc(roomRef, {
+                        tiles: JSON.stringify(gameState.tiles),
+                        turn: gameState.turn,
+                        currentPlayer: gameState.currentPlayer,
+                        players: gameState.players
+                    });
+                }
+            }, (error) => {
+                console.error("Firestore error:", error);
+            });
+        }
+
+        window.addEventListener('resize', resizeCanvas);
+        window.onload = () => {
+            initMap();
+            resizeCanvas();
+            updateHUD();
+        };
+    </script>
+</body>
+</html>
